@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeAll, afterAll, afterEach } from 'vitest';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import exifr from 'exifr';
+import piexif from 'piexifjs';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -13,13 +14,14 @@ const sampleJpegPath = path.join(fixturesDir, 'sample.jpg');
 
 // Mock exifr functions
 vi.mock('exifr', () => {
-  return {
+  const api = {
     parse: vi.fn(),
     orientation: vi.fn(),
     rotation: vi.fn(),
     gps: vi.fn(),
     thumbnail: vi.fn()
   };
+  return { default: api };
 });
 
 describe('MCP Tools', () => {
@@ -72,7 +74,7 @@ describe('MCP Tools', () => {
       expect(tool).toBeDefined();
       
       // Call the tool
-      const result = await tool.callback(
+      const result = await tool.handler(
         { image: { kind: 'path', path: sampleJpegPath } },
         { request: {} }
       );
@@ -104,7 +106,7 @@ describe('MCP Tools', () => {
       expect(tool).toBeDefined();
       
       // Call the tool with specific segments
-      const result = await tool.callback(
+      const result = await tool.handler(
         {
           image: { kind: 'path', path: sampleJpegPath },
           segments: ['XMP', 'ICC']
@@ -137,7 +139,7 @@ describe('MCP Tools', () => {
       const tool = tools['read-metadata'];
       
       // Call the tool should error
-      const result = await tool.callback(
+      const result = await tool.handler(
         { image: { kind: 'path', path: sampleJpegPath } },
         { request: {} }
       );
@@ -154,7 +156,7 @@ describe('MCP Tools', () => {
       const tool = tools['read-metadata'];
       
       // Call the tool should error
-      const result = await tool.callback(
+      const result = await tool.handler(
         { image: { kind: 'path', path: sampleJpegPath } },
         { request: {} }
       );
@@ -179,7 +181,7 @@ describe('MCP Tools', () => {
       expect(tool).toBeDefined();
       
       // Call the tool
-      const result = await tool.callback(
+      const result = await tool.handler(
         { image: { kind: 'path', path: sampleJpegPath } },
         { request: {} }
       );
@@ -210,7 +212,7 @@ describe('MCP Tools', () => {
       const tool = tools['read-exif'];
       
       // Call the tool with pick list
-      const result = await tool.callback(
+      const result = await tool.handler(
         {
           image: { kind: 'path', path: sampleJpegPath },
           pick: ['Make']
@@ -246,7 +248,7 @@ describe('MCP Tools', () => {
       expect(tool).toBeDefined();
       
       // Test with extended option
-      const result = await tool.callback(
+      const result = await tool.handler(
         {
           image: { kind: 'path', path: sampleJpegPath },
           extended: true
@@ -276,7 +278,7 @@ describe('MCP Tools', () => {
       const tool = tools['read-icc'];
       expect(tool).toBeDefined();
       
-      const result = await tool.callback(
+      const result = await tool.handler(
         { image: { kind: 'path', path: sampleJpegPath } },
         { request: {} }
       );
@@ -303,7 +305,7 @@ describe('MCP Tools', () => {
       const tool = tools['orientation'];
       expect(tool).toBeDefined();
       
-      const result = await tool.callback(
+      const result = await tool.handler(
         { image: { kind: 'path', path: sampleJpegPath } },
         { request: {} }
       );
@@ -328,7 +330,7 @@ describe('MCP Tools', () => {
       const tool = tools['rotation-info'];
       expect(tool).toBeDefined();
       
-      const result = await tool.callback(
+      const result = await tool.handler(
         { image: { kind: 'path', path: sampleJpegPath } },
         { request: {} }
       );
@@ -347,7 +349,7 @@ describe('MCP Tools', () => {
       const tool = tools['gps-coordinates'];
       expect(tool).toBeDefined();
       
-      const result = await tool.callback(
+      const result = await tool.handler(
         { image: { kind: 'path', path: sampleJpegPath } },
         { request: {} }
       );
@@ -364,7 +366,7 @@ describe('MCP Tools', () => {
       
       const tool = tools['gps-coordinates'];
       
-      const result = await tool.callback(
+      const result = await tool.handler(
         { image: { kind: 'path', path: sampleJpegPath } },
         { request: {} }
       );
@@ -382,7 +384,7 @@ describe('MCP Tools', () => {
       const tool = tools['thumbnail'];
       expect(tool).toBeDefined();
       
-      const result = await tool.callback(
+      const result = await tool.handler(
         { image: { kind: 'path', path: sampleJpegPath } },
         { request: {} }
       );
@@ -392,6 +394,51 @@ describe('MCP Tools', () => {
       expect(result.content[0].type).toBe('text');
       const parsedResult = JSON.parse(result.content[0].text);
       expect(parsedResult.dataUrl).toMatch(/^data:image\/jpeg;base64,/);
+    });
+  });
+
+  describe('strip-metadata tool', () => {
+    it('removes metadata segments and returns a cleaned data URL', async () => {
+      // Build a JPEG with embedded EXIF
+      const exifObj = { '0th': {}, Exif: {}, GPS: {}, Interop: {}, '1st': {} };
+      exifObj['0th'][piexif.ImageIFD.Make] = 'Test Cam';
+      const exifBytes = piexif.dump(exifObj);
+      const base = fs.readFileSync(sampleJpegPath);
+      const withExif = Buffer.from(piexif.insert(exifBytes, base.toString('binary')), 'binary');
+
+      const tool = tools['strip-metadata'];
+      expect(tool).toBeDefined();
+
+      const result = await tool.handler(
+        { image: { kind: 'base64', data: withExif.toString('base64') } },
+        { request: {} }
+      );
+
+      expect(result.content[0].type).toBe('text');
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.removed).toContain('exif');
+      expect(parsed.dataUrl).toMatch(/^data:image\/jpeg;base64,/);
+      expect(parsed.sizeAfter).toBeLessThan(parsed.sizeBefore);
+    });
+  });
+
+  describe('edit-exif tool', () => {
+    it('edits fields and returns an updated data URL', async () => {
+      const tool = tools['edit-exif'];
+      expect(tool).toBeDefined();
+
+      const result = await tool.handler(
+        {
+          image: { kind: 'path', path: sampleJpegPath },
+          fields: { Make: 'Edited Cam', Model: 'M1' }
+        },
+        { request: {} }
+      );
+
+      expect(result.content[0].type).toBe('text');
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.changed).toContain('Make');
+      expect(parsed.dataUrl).toMatch(/^data:image\/jpeg;base64,/);
     });
   });
 });

@@ -7,6 +7,8 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/server.js",
+    "web": "node dist/web/server.js",
+    "web:dev": "ts-node --esm src/web/server.ts",
     "dev": "ts-node --esm src/server.ts",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -24,10 +26,12 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "latest",
     "exifr": "latest",
+    "piexifjs": "^1.0.6",
     "zod": "^3.24.3"
   },
   "devDependencies": {
     "@types/node": "^22.15.3",
+    "@types/piexifjs": "^1.0.0",
     "eslint": "^9.25.1",
     "ts-node": "^10.9.2",
     "typescript": "^5.8.3",

@@ -10,6 +10,8 @@ import {
 import { 
   ImageSourceType
 } from '../types/image.js';
+import { stripImage } from '../web/image.js';
+import { editImage } from '../web/edit.js';
 import { z } from 'zod';
 
 /**
@@ -239,6 +241,70 @@ export function registerTools(server: McpServer): Record<string, any> {
     }
   );
   tools['gps-coordinates'] = gpsCoordinatesTool;
+
+  // Tool 10.5: strip-metadata - removes all metadata from an image
+  const stripMetadataTool = server.tool('strip-metadata',
+    "Remove all metadata (EXIF, GPS, XMP, ICC, IPTC) from an image losslessly. Supports JPEG and PNG.",
+    {
+      image: ImageSourceSchema
+    },
+    async (args, extra) => {
+      try {
+        const { image } = args;
+        const result = await stripImage(image);
+        return createSuccessResponse({
+          removed: result.removed,
+          format: result.format,
+          mime: result.mime,
+          sizeBefore: result.sizeBefore,
+          sizeAfter: result.sizeAfter,
+          dataUrl: `data:${result.mime};base64,${Buffer.from(result.data).toString('base64')}`
+        });
+      } catch (error) {
+        return createErrorResponse(`Error stripping metadata: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+  );
+  tools['strip-metadata'] = stripMetadataTool;
+
+  // Tool 10.75: edit-exif - edits EXIF/GPS fields in a JPEG
+  const editExifTool = server.tool('edit-exif',
+    "Edit EXIF and GPS fields in a JPEG image. Returns the modified image as a base64 data URL.",
+    {
+      image: ImageSourceSchema,
+      fields: z.object({
+        Make: z.string().optional(),
+        Model: z.string().optional(),
+        Software: z.string().optional(),
+        Artist: z.string().optional(),
+        Copyright: z.string().optional(),
+        ImageDescription: z.string().optional(),
+        DateTime: z.string().optional(),
+        DateTimeOriginal: z.string().optional(),
+        DateTimeDigitized: z.string().optional(),
+        UserComment: z.string().optional()
+      }).optional(),
+      gps: z.object({
+        latitude: z.number(),
+        longitude: z.number()
+      }).optional(),
+      clearGps: z.boolean().optional()
+    },
+    async (args, extra) => {
+      try {
+        const { image, fields, gps, clearGps } = args;
+        const result = await editImage(image, { fields, gps, clearGps });
+        return createSuccessResponse({
+          changed: result.changed,
+          mime: result.mime,
+          dataUrl: `data:${result.mime};base64,${Buffer.from(result.data).toString('base64')}`
+        });
+      } catch (error) {
+        return createErrorResponse(`Error editing EXIF data: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+  );
+  tools['edit-exif'] = editExifTool;
 
   // Tool 11: thumbnail - extracts embedded thumbnail
   const thumbnailTool = server.tool('thumbnail',

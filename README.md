@@ -82,7 +82,48 @@ The following tools are provided by the server:
 | `orientation` | Gets image orientation (1-8) |
 | `rotation-info` | Gets rotation and flip information |
 | `gps-coordinates` | Extracts GPS coordinates |
+| `strip-metadata` | Removes all metadata (EXIF/GPS/XMP/ICC/IPTC) losslessly. JPEG & PNG |
+| `edit-exif` | Edits EXIF and GPS fields in a JPEG, returns the modified image |
 | `thumbnail` | Extracts embedded thumbnail |
+
+### Web UI (browser)
+
+A built-in web interface — the **Metadata Lab** — lets you use every feature from any browser without an MCP client:
+
+```bash
+npm run build
+npm run web
+# open http://localhost:3000
+```
+
+Add `WEB_OPEN=1` to auto-open the browser, or change the port with `WEB_PORT`.
+
+**Analyze** — drag & drop one or many images (or paste a URL) for instant metadata:
+- Summary cards (camera, lens, exposure, orientation), a full tag table, and raw JSON export
+- GPS coordinates with OpenStreetMap / Google Maps links and a one-click copy
+- Batch mode: every dropped image gets a thumbnail in a filmstrip you can switch between
+
+**Edit EXIF** — edit camera fields (Make, Model, Software, dates, copyright…), set GPS coordinates, or clear GPS, then download a modified copy. The original file is never touched.
+
+**Clean** — remove *all* metadata (EXIF, GPS, XMP, ICC, IPTC) from JPEG/PNG with one click. Lossless: only metadata segments are stripped, pixels are untouched.
+
+The web server exposes a JSON API as well:
+
+```bash
+curl -X POST http://localhost:3000/api/analyze \
+  -H 'Content-Type: application/json' \
+  -d '{"image":{"kind":"path","path":"/path/to/photo.jpg"}}'
+
+curl -X POST http://localhost:3000/api/strip \
+  -H 'Content-Type: application/json' \
+  -d '{"image":{"kind":"path","path":"/path/to/photo.jpg"}}'
+
+curl -X POST http://localhost:3000/api/edit \
+  -H 'Content-Type: application/json' \
+  -d '{"image":{"kind":"base64","data":"..."},"fields":{"Make":"My Camera"},"gps":{"latitude":40.71,"longitude":-74.0}}'
+```
+
+Image sources match the MCP tool format (`path`, `url`, `base64`, `buffer`).
 
 ### Debugging with MCP Inspector
 
@@ -146,13 +187,19 @@ npm run test:watch
 ```
 exif-mcp/
 ├── src/
-│   ├── server.ts         # Main entry point
+│   ├── server.ts         # Main MCP entry point
 │   ├── tools/
 │   │   ├── index.ts      # Tool registration
 │   │   ├── loaders.ts    # Image loading utilities
 │   │   └── segments.ts   # exifr options builders
+│   ├── web/
+│   │   ├── server.ts     # Browser web server (API + static UI)
+│   │   ├── image.ts      # Format detection, JPEG/PNG metadata stripping
+│   │   └── edit.ts       # EXIF/GPS editing (piexifjs)
 │   └── types/
 │       └── image.ts      # Type definitions
+├── web/
+│   └── index.html        # Metadata Lab browser UI
 ├── tests/                # Test files
 └── README.md
 ```

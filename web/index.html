@@ -1,0 +1,768 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>exif-mcp — Metadata Lab</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%234f8cff'/%3E%3Ctext x='16' y='22' font-size='17' font-family='Arial' font-weight='bold' fill='white' text-anchor='middle'%3EE%3C/text%3E%3C/svg%3E">
+<style>
+  :root {
+    --bg: #0b0e13;
+    --panel: #141922;
+    --panel-2: #10151d;
+    --border: #252d3b;
+    --border-soft: #1d2430;
+    --text: #e8ecf1;
+    --muted: #8b94a3;
+    --accent: #4f8cff;
+    --accent-2: #22c55e;
+    --warn: #f59e0b;
+    --err: #ef4444;
+    --violet: #7c5cff;
+    --radius: 12px;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background:
+      radial-gradient(1200px 500px at 80% -10%, rgba(79,140,255,.10), transparent 60%),
+      radial-gradient(900px 400px at -10% 110%, rgba(124,92,255,.10), transparent 60%),
+      var(--bg);
+    color: var(--text);
+    line-height: 1.5;
+  }
+  a { color: var(--accent); text-decoration: none; }
+
+  .app { display: flex; height: 100vh; }
+
+  /* Sidebar */
+  aside {
+    width: 210px;
+    flex-shrink: 0;
+    background: var(--panel-2);
+    border-right: 1px solid var(--border-soft);
+    display: flex;
+    flex-direction: column;
+    padding: 18px 12px;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; padding: 0 8px 16px; }
+  .brand .logo {
+    width: 32px; height: 32px;
+    background: linear-gradient(135deg, var(--accent), var(--violet));
+    border-radius: 9px;
+    display: grid; place-items: center;
+    font-weight: 800; color: #fff; font-size: 16px;
+  }
+  .brand .name { font-size: 15px; font-weight: 700; }
+  .brand .sub { font-size: 11px; color: var(--muted); }
+
+  nav { display: flex; flex-direction: column; gap: 4px; }
+  .nav-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 12px;
+    border-radius: 9px;
+    border: 1px solid transparent;
+    background: none;
+    color: var(--muted);
+    font-size: 14px;
+    cursor: pointer;
+    text-align: left;
+    transition: background .12s, color .12s, border-color .12s;
+  }
+  .nav-item:hover { background: var(--panel); color: var(--text); }
+  .nav-item.active {
+    background: linear-gradient(135deg, rgba(79,140,255,.16), rgba(124,92,255,.12));
+    border-color: rgba(79,140,255,.35);
+    color: var(--text);
+    font-weight: 600;
+  }
+  .nav-item .ico { font-size: 16px; width: 20px; text-align: center; }
+  .nav-count { margin-left: auto; font-size: 11px; background: var(--border); padding: 1px 7px; border-radius: 99px; }
+
+  aside .spacer { flex: 1; }
+  .status-row {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 12px; font-size: 12px; color: var(--muted);
+    border-top: 1px solid var(--border-soft);
+  }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+  .dot.on { background: var(--accent-2); box-shadow: 0 0 8px rgba(34,197,94,.7); }
+
+  main { flex: 1; overflow-y: auto; padding: 22px 28px; }
+
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius);
+    padding: 18px;
+    margin-bottom: 16px;
+  }
+  .card h2 { font-size: 12px; margin: 0 0 14px; color: var(--muted); text-transform: uppercase; letter-spacing: 1.2px; }
+
+  /* Source bar */
+  .dropzone {
+    border: 2px dashed var(--border);
+    border-radius: var(--radius);
+    padding: 26px 20px;
+    text-align: center;
+    color: var(--muted);
+    cursor: pointer;
+    transition: border-color .15s, background .15s;
+  }
+  .dropzone.dragover, .dropzone:hover { border-color: var(--accent); background: rgba(79,140,255,.06); }
+  .dropzone .big { font-size: 14px; color: var(--text); margin-bottom: 4px; }
+  .dropzone input[type=file] { display: none; }
+  .row { display: flex; gap: 10px; margin-top: 12px; }
+  .row input[type=text] {
+    flex: 1;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 9px;
+    padding: 10px 12px;
+    font-size: 14px;
+    outline: none;
+  }
+  .row input[type=text]:focus { border-color: var(--accent); }
+  button {
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 9px;
+    padding: 10px 18px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity .15s, transform .05s;
+  }
+  button:hover { opacity: .88; }
+  button:active { transform: translateY(1px); }
+  button:disabled { opacity: .4; cursor: not-allowed; }
+  button.ghost { background: transparent; border: 1px solid var(--border); color: var(--text); }
+  button.danger { background: var(--err); }
+  button.green { background: var(--accent-2); }
+
+  /* Filmstrip */
+  .filmstrip { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+  .frame {
+    position: relative;
+    width: 64px; height: 64px;
+    border-radius: 10px;
+    border: 2px solid var(--border);
+    overflow: hidden;
+    cursor: pointer;
+    transition: border-color .12s, transform .12s;
+  }
+  .frame:hover { transform: translateY(-2px); }
+  .frame.sel { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(79,140,255,.25); }
+  .frame img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .frame .x {
+    position: absolute; top: 2px; right: 2px;
+    width: 17px; height: 17px;
+    background: rgba(0,0,0,.65);
+    color: #fff; font-size: 11px;
+    border: none; border-radius: 6px;
+    line-height: 1;
+    padding: 0;
+    display: none;
+    cursor: pointer;
+  }
+  .frame:hover .x { display: block; }
+  .frame .badge {
+    position: absolute; left: 2px; bottom: 2px;
+    font-size: 9px; color: #fff;
+    background: rgba(0,0,0,.55);
+    padding: 1px 4px; border-radius: 4px;
+    text-transform: uppercase;
+  }
+
+  /* Layout helpers */
+  .grid-2 { display: grid; grid-template-columns: 320px 1fr; gap: 16px; align-items: start; }
+  @media (max-width: 860px) { .grid-2 { grid-template-columns: 1fr; } }
+  .preview img {
+    width: 100%;
+    max-height: 300px;
+    object-fit: contain;
+    border-radius: 10px;
+    border: 1px solid var(--border-soft);
+    background: #000;
+  }
+  .caption { color: var(--muted); font-size: 12px; margin-top: 8px; }
+
+  .meta { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 7px 12px;
+    font-size: 13px;
+  }
+  .chip .k { color: var(--muted); margin-right: 6px; font-size: 11px; text-transform: uppercase; letter-spacing: .5px; }
+  .chip b { font-weight: 600; }
+
+  .gps-box {
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    background: rgba(34,197,94,.07);
+    border: 1px solid rgba(34,197,94,.25);
+    border-radius: 10px;
+    padding: 12px 16px;
+    margin-top: 12px;
+  }
+  .gps-box .coords { font-family: var(--mono); font-size: 15px; font-weight: 600; }
+  .gps-box a {
+    color: var(--accent-2);
+    font-size: 13px;
+    border: 1px solid rgba(34,197,94,.35);
+    border-radius: 7px;
+    padding: 5px 11px;
+  }
+  .gps-box a:hover { background: rgba(34,197,94,.12); }
+  .gps-box button.ghost { font-size: 12px; padding: 5px 11px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  td, th { padding: 7px 10px; border-bottom: 1px solid var(--border-soft); text-align: left; vertical-align: top; }
+  th { color: var(--muted); font-weight: 500; width: 230px; }
+  td:last-child { font-family: var(--mono); word-break: break-word; }
+  tr:hover td { background: rgba(79,140,255,.04); }
+
+  details { background: var(--panel-2); border: 1px solid var(--border-soft); border-radius: 9px; padding: 10px 14px; }
+  summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+  pre {
+    margin: 12px 0 0;
+    max-height: 400px;
+    overflow: auto;
+    font-size: 12px;
+    color: #c9d1d9;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  .toolbar { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+
+  /* Forms */
+  .field { margin-bottom: 12px; }
+  .field label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 5px; text-transform: uppercase; letter-spacing: .6px; }
+  .field input, .field select {
+    width: 100%;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 8px;
+    padding: 9px 11px;
+    font-size: 13.5px;
+    font-family: var(--mono);
+    outline: none;
+  }
+  .field input:focus { border-color: var(--accent); }
+  .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .check { display: flex; align-items: center; gap: 8px; font-size: 13.5px; color: var(--text); margin: 14px 0; }
+  .check input { width: auto; }
+
+  .alert {
+    border-radius: 9px;
+    padding: 12px 16px;
+    font-size: 13.5px;
+    margin-bottom: 14px;
+  }
+  .alert.info { background: rgba(79,140,255,.1); border: 1px solid rgba(79,140,255,.3); color: #bcd3ff; }
+  .alert.warn { background: rgba(245,158,11,.1); border: 1px solid rgba(245,158,11,.3); color: #fde3b3; }
+  .alert.err { background: rgba(239,68,68,.12); border: 1px solid rgba(239,68,68,.35); color: #fca5a5; }
+  .alert.ok { background: rgba(34,197,94,.1); border: 1px solid rgba(34,197,94,.3); color: #baf0cd; }
+
+  .stat-row { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 12px; }
+  .stat { background: var(--panel-2); border: 1px solid var(--border-soft); border-radius: 10px; padding: 10px 16px; min-width: 110px; }
+  .stat .v { font-size: 17px; font-weight: 700; font-family: var(--mono); }
+  .stat .l { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; margin-top: 2px; }
+
+  .tag-list { display: flex; gap: 8px; flex-wrap: wrap; }
+  .tag { background: rgba(239,68,68,.12); border: 1px solid rgba(239,68,68,.35); color: #fca5a5; border-radius: 99px; padding: 4px 12px; font-size: 12.5px; font-family: var(--mono); }
+
+  .empty { text-align: center; color: var(--muted); padding: 60px 0; }
+  .empty .big { font-size: 40px; margin-bottom: 10px; opacity: .6; }
+
+  .hidden { display: none !important; }
+  .spinner {
+    display: inline-block;
+    width: 14px; height: 14px;
+    border: 2px solid rgba(255,255,255,.3);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin .7s linear infinite;
+    vertical-align: -2px;
+    margin-right: 8px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside>
+    <div class="brand">
+      <div class="logo">E</div>
+      <div>
+        <div class="name">exif-mcp</div>
+        <div class="sub">Metadata Lab</div>
+      </div>
+    </div>
+    <nav>
+      <button class="nav-item active" data-view="analyze"><span class="ico">🔍</span> Analyze</button>
+      <button class="nav-item" data-view="edit"><span class="ico">✏️</span> Edit EXIF</button>
+      <button class="nav-item" data-view="clean"><span class="ico">🧹</span> Clean</button>
+    </nav>
+    <div class="spacer"></div>
+    <div class="status-row"><span class="dot on" id="statusDot"></span><span id="statusText">Server connected</span></div>
+  </aside>
+
+  <main>
+    <div class="card">
+      <h2>Add images</h2>
+      <div class="dropzone" id="dropzone">
+        <div class="big">Drag &amp; drop images here</div>
+        <div>or click to browse — batch supported (JPEG, PNG, TIFF, HEIC)</div>
+        <input type="file" id="fileInput" accept="image/*,.heic,.heif,.tif,.tiff" multiple>
+      </div>
+      <div class="row">
+        <input type="text" id="urlInput" placeholder="...or paste an image URL (http/https)">
+        <button id="urlBtn" class="ghost">Load URL</button>
+      </div>
+      <div class="filmstrip" id="filmstrip"></div>
+    </div>
+
+    <div id="alert" class="hidden"></div>
+
+    <div id="view-analyze"></div>
+    <div id="view-edit" class="hidden"></div>
+    <div id="view-clean" class="hidden"></div>
+  </main>
+</div>
+
+<script>
+'use strict';
+
+const MAX_BYTES = 30 * 1024 * 1024;
+const state = { images: [], selectedId: null, view: 'analyze' };
+
+const el = id => document.getElementById(id);
+const dropzone = el('dropzone');
+const fileInput = el('fileInput');
+const urlInput = el('urlInput');
+const urlBtn = el('urlBtn');
+const filmstrip = el('filmstrip');
+const alertEl = el('alert');
+const viewAnalyze = el('view-analyze');
+const viewEdit = el('view-edit');
+const viewClean = el('view-clean');
+
+const FIELD_DEFS = [
+  ['Make', 'Camera make'],
+  ['Model', 'Camera model'],
+  ['Software', 'Software'],
+  ['ImageDescription', 'Description'],
+  ['Artist', 'Artist'],
+  ['Copyright', 'Copyright'],
+  ['UserComment', 'User comment'],
+  ['DateTime', 'Date modified'],
+  ['DateTimeOriginal', 'Date taken'],
+  ['DateTimeDigitized', 'Date digitized'],
+];
+
+/* ---------------- API ---------------- */
+
+async function api(url, payload) {
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  const data = await res.json();
+  if (!res.ok || data.error) throw new Error(data.error || 'Request failed');
+  return data;
+}
+
+/* ---------------- File loading ---------------- */
+
+dropzone.addEventListener('click', () => fileInput.click());
+dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('dragover'); });
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+dropzone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropzone.classList.remove('dragover');
+  for (const f of [...e.dataTransfer.files].slice(0, 20)) handleFile(f);
+});
+fileInput.addEventListener('change', () => {
+  for (const f of [...fileInput.files].slice(0, 20)) handleFile(f);
+  fileInput.value = '';
+});
+urlBtn.addEventListener('click', loadUrl);
+urlInput.addEventListener('keydown', e => { if (e.key === 'Enter') loadUrl(); });
+
+async function loadUrl() {
+  const url = urlInput.value.trim();
+  if (!url) return;
+  urlInput.value = '';
+  await addImage({ kind: 'url', url }, 'remote-' + (Date.now() % 10000) + '.jpg');
+}
+
+function handleFile(file) {
+  if (file.size > MAX_BYTES) {
+    showAlert('err', file.name + ' is ' + (file.size/1024/1024).toFixed(1) + 'MB — max is 30MB.');
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = () => addImage({ kind: 'base64', data: reader.result }, file.name);
+  reader.onerror = () => showAlert('err', 'Could not read ' + file.name);
+  reader.readAsDataURL(file);
+}
+
+async function addImage(source, name) {
+  setBusy(true);
+  try {
+    const result = await api('/api/analyze', { image: source });
+    const img = {
+      id: 'img-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
+      name,
+      source,
+      dataUrl: source.data || null,
+      meta: result
+    };
+    state.images.push(img);
+    state.selectedId = img.id;
+    renderFilmstrip();
+    renderCurrent();
+  } catch (e) {
+    showAlert('err', 'Failed to analyze ' + name + ': ' + e.message);
+  }
+  setBusy(false);
+}
+
+function removeImage(id) {
+  const idx = state.images.findIndex(i => i.id === id);
+  if (idx === -1) return;
+  state.images.splice(idx, 1);
+  if (state.selectedId === id) {
+    const next = state.images[idx] || state.images[idx - 1] || null;
+    state.selectedId = next ? next.id : null;
+  }
+  renderFilmstrip();
+  renderCurrent();
+}
+
+function current() {
+  return state.images.find(i => i.id === state.selectedId) || null;
+}
+
+/* ---------------- Rendering ---------------- */
+
+function setBusy(b) { urlBtn.disabled = b; }
+
+function showAlert(type, msg) {
+  alertEl.className = 'alert ' + type;
+  alertEl.classList.remove('hidden');
+  alertEl.textContent = msg;
+  setTimeout(() => alertEl.classList.add('hidden'), 6000);
+}
+
+function clearAlert() { alertEl.classList.add('hidden'); }
+
+function renderFilmstrip() {
+  if (!state.images.length) { filmstrip.innerHTML = ''; return; }
+  filmstrip.innerHTML = state.images.map(i => {
+    const src = i.dataUrl || i.meta.thumbnailDataUrl || '';
+    const fmt = (i.meta.info && i.meta.info.format) || 'img';
+    const sel = i.id === state.selectedId ? 'sel' : '';
+    return '<div class="frame ' + sel + '" data-id="' + i.id + '">' +
+      (src ? '<img src="' + src + '" alt="">' : '<div style="height:100%;display:grid;place-items:center;font-size:20px">🖼</div>') +
+      '<button class="x" data-remove="' + i.id + '" title="Remove">✕</button>' +
+      '<span class="badge">' + fmt + '</span>' +
+      '</div>';
+  }).join('');
+}
+
+filmstrip.addEventListener('click', e => {
+  const rem = e.target.closest('[data-remove]');
+  if (rem) { e.stopPropagation(); removeImage(rem.dataset.remove); return; }
+  const frame = e.target.closest('.frame');
+  if (frame) {
+    state.selectedId = frame.dataset.id;
+    renderFilmstrip();
+    renderCurrent();
+  }
+});
+
+document.querySelectorAll('.nav-item').forEach(btn => {
+  btn.addEventListener('click', () => {
+    state.view = btn.dataset.view;
+    document.querySelectorAll('.nav-item').forEach(b => b.classList.toggle('active', b === btn));
+    renderCurrent();
+  });
+});
+
+function renderCurrent() {
+  renderFilmstrip();
+  const img = current();
+  clearAlert();
+  if (!img) {
+    viewAnalyze.innerHTML = '<div class="card"><div class="empty"><div class="big">🖼</div>Add an image to start. Drop files above or paste a URL.</div></div>';
+    viewEdit.innerHTML = '';
+    viewClean.innerHTML = '';
+    viewAnalyze.classList.remove('hidden');
+    viewEdit.classList.add('hidden');
+    viewClean.classList.add('hidden');
+    return;
+  }
+  viewAnalyze.classList.toggle('hidden', state.view !== 'analyze');
+  viewEdit.classList.toggle('hidden', state.view !== 'edit');
+  viewClean.classList.toggle('hidden', state.view !== 'clean');
+  if (state.view === 'analyze') renderAnalyze(img);
+  if (state.view === 'edit') renderEdit(img);
+  if (state.view === 'clean') renderClean(img);
+}
+
+/* ---------------- Analyze ---------------- */
+
+function fmt(v) {
+  if (v === null || v === undefined || v === '') return '—';
+  if (typeof v === 'boolean') return v ? 'true' : 'false';
+  if (typeof v === 'object') { try { return JSON.stringify(v); } catch { return String(v); } }
+  return String(v);
+}
+
+function chip(k, v) {
+  if (v === null || v === undefined || v === '') return '';
+  return '<span class="chip"><span class="k">' + k + '</span><b>' + fmt(v) + '</b></span>';
+}
+
+function renderAnalyze(img) {
+  const m = img.meta.metadata || {};
+  const gps = img.meta.gps;
+  const info = img.meta.info || {};
+
+  let html = '<div class="grid-2">';
+  html += '<div class="card"><h2>Image</h2><div class="preview">';
+  html += img.dataUrl ? '<img src="' + img.dataUrl + '">' : '<img src="' + (img.meta.thumbnailDataUrl || '') + '">';
+  html += '<div class="caption">' + escapeHtml(img.name) + ' · ' + fmtSize(info.size) + (info.width ? ' · ' + info.width + ' × ' + info.height + 'px' : '') + ' · ' + String(info.format || '').toUpperCase() + '</div>';
+  html += '</div></div>';
+
+  html += '<div>';
+  html += '<div class="card"><h2>Summary</h2><div class="meta">';
+  html += chip('Make', m.Make) + chip('Model', m.Model) + chip('Date', m.DateTimeOriginal || m.ModifyDate);
+  html += chip('Size', m.ExifImageWidth ? m.ExifImageWidth + ' × ' + m.ExifImageHeight : '');
+  html += chip('ISO', m.ISO) + chip('Exposure', m.ExposureTime) + chip('Aperture', m.FNumber);
+  html += chip('Focal', m.FocalLength) + chip('Orientation', img.meta.orientation) + chip('Flash', m.Flash);
+  html += '</div>';
+
+  if (gps && gps.latitude !== undefined && gps.longitude !== undefined) {
+    const lat = gps.latitude, lon = gps.longitude;
+    const osm = 'https://www.openstreetmap.org/?mlat=' + lat + '&mlon=' + lon + '#map=14/' + lat + '/' + lon;
+    const gmaps = 'https://maps.google.com/maps?q=' + lat + ',' + lon;
+    html += '<div class="gps-box"><span class="coords">' + lat.toFixed(6) + ', ' + lon.toFixed(6) + '</span>';
+    html += '<a href="' + osm + '" target="_blank" rel="noopener">OpenStreetMap ↗</a>';
+    html += '<a href="' + gmaps + '" target="_blank" rel="noopener">Google Maps ↗</a>';
+    html += '<button class="ghost" data-copy="' + lat + ',' + lon + '">Copy</button></div>';
+  } else {
+    html += '<div class="alert info" style="margin-top:12px">No GPS coordinates in this image.</div>';
+  }
+
+  html += '<div class="toolbar">';
+  html += '<button data-dl="' + jsonDataUrl(img.meta) + '" class="ghost">⬇ Download JSON</button>';
+  html += '<button class="ghost" data-switch="edit">✏️ Edit EXIF</button>';
+  html += '<button class="ghost" data-switch="clean">🧹 Strip metadata</button>';
+  html += '</div></div></div>';
+
+  if (m && Object.keys(m).length) {
+    let rows = '';
+    for (const k of Object.keys(m)) {
+      const v = m[k];
+      rows += '<tr><th>' + escapeHtml(k) + '</th><td>' + (typeof v === 'object' && v !== null ? escapeHtml(JSON.stringify(v)) : escapeHtml(fmt(v))) + '</td></tr>';
+    }
+    html += '<div class="card"><h2>Metadata (' + Object.keys(m).length + ' tags)</h2><table>' + rows + '</table></div>';
+  } else {
+    html += '<div class="card"><h2>Metadata</h2><div class="alert warn">No metadata found in this image.</div></div>';
+  }
+
+  html += '<div class="card"><h2>Raw JSON</h2><details><summary>Show full JSON output</summary><pre>' + escapeHtml(JSON.stringify(img.meta, null, 2)) + '</pre></details></div>';
+
+  viewAnalyze.innerHTML = html;
+}
+
+viewAnalyze.addEventListener('click', e => {
+  const copy = e.target.closest('[data-copy]');
+  if (copy) {
+    navigator.clipboard && navigator.clipboard.writeText(copy.dataset.copy);
+    copy.textContent = 'Copied ✓';
+    setTimeout(() => (copy.textContent = 'Copy'), 1500);
+    return;
+  }
+  const dl = e.target.closest('[data-dl]');
+  if (dl) {
+    const a = document.createElement('a');
+    a.href = dl.dataset.dl;
+    a.download = current().name.replace(/\.[^.]+$/, '') + '.metadata.json';
+    a.click();
+    return;
+  }
+  const sw = e.target.closest('[data-switch]');
+  if (sw) {
+    document.querySelector('.nav-item[data-view="' + sw.dataset.switch + '"]').click();
+  }
+});
+
+function jsonDataUrl(obj) {
+  return 'data:application/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(obj, null, 2));
+}
+
+function fmtSize(n) {
+  if (!n) return '';
+  if (n > 1024 * 1024) return (n / 1024 / 1024).toFixed(1) + ' MB';
+  if (n > 1024) return (n / 1024).toFixed(1) + ' KB';
+  return n + ' B';
+}
+
+/* ---------------- Edit ---------------- */
+
+function editFields() {
+  const m = current().meta.metadata || {};
+  const gps = current().meta.gps || {};
+  let html = '<div class="card"><h2>Edit EXIF</h2>';
+  html += '<div class="alert warn">Only JPEG is editable. Changes write a new EXIF block into a <b>copy</b> — your original is never modified.</div>';
+  html += '<div class="field-row">';
+  FIELD_DEFS.forEach(([key, label], i) => {
+    html += '<div class="field"><label>' + label + ' (' + key + ')</label><input data-field="' + key + '" value="' + escapeHtml(m[key] ?? '') + '"></div>';
+    if (i % 2 === 1) html += '</div><div class="field-row">';
+  });
+  html += '</div>';
+  html += '<h2 style="margin-top:16px">GPS</h2>';
+  html += '<div class="field-row">';
+  html += '<div class="field"><label>Latitude</label><input data-field="lat" type="number" step="any" value="' + (gps.latitude ?? '') + '"></div>';
+  html += '<div class="field"><label>Longitude</label><input data-field="lon" type="number" step="any" value="' + (gps.longitude ?? '') + '"></div>';
+  html += '</div>';
+  html += '<label class="check"><input type="checkbox" id="clearGps"> Remove GPS coordinates</label>';
+  html += '<div class="toolbar"><button id="saveEdit" class="green">💾 Save &amp; Download</button></div>';
+  html += '</div>';
+  viewEdit.innerHTML = html;
+}
+
+async function saveEdit() {
+  const img = current();
+  if (!img) return;
+  const fields = {};
+  FIELD_DEFS.forEach(([key]) => {
+    const input = viewEdit.querySelector('[data-field="' + key + '"]');
+    let val = input.value.trim();
+    if (val !== '') {
+      if (key.startsWith('DateTime')) val = toExifDate(val);
+      fields[key] = val;
+    }
+  });
+  const changes = { fields };
+  const lat = parseFloat(viewEdit.querySelector('[data-field="lat"]').value);
+  const lon = parseFloat(viewEdit.querySelector('[data-field="lon"]').value);
+  if (el('clearGps').checked) changes.clearGps = true;
+  else if (Number.isFinite(lat) && Number.isFinite(lon)) changes.gps = { latitude: lat, longitude: lon };
+
+  const btn = el('saveEdit');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>Saving...';
+  try {
+    const result = await api('/api/edit', { image: img.source, ...changes });
+    const fname = img.name.replace(/\.[^.]+$/, '') + '-edited.jpg';
+    viewEdit.innerHTML =
+      '<div class="alert ok">Saved! Changed: ' + result.changed.join(', ') + '</div>' +
+      '<div class="card"><h2>Edited preview</h2><div class="preview"><img src="' + result.dataUrl + '">' +
+      '<div class="caption">' + fname + ' · ' + fmtSize(atob(result.dataUrl.split(',')[1]).length) + '</div></div>' +
+      '<div class="toolbar"><button id="dlEdited" class="green">⬇ Download edited image</button>' +
+      '<button class="ghost" data-back>↩ Back to form</button></div></div>';
+    viewEdit.querySelector('#dlEdited').addEventListener('click', () => downloadDataUrl(result.dataUrl, fname));
+    viewEdit.querySelector('[data-back]').addEventListener('click', renderEdit);
+  } catch (e) {
+    showAlert('err', 'Edit failed: ' + e.message);
+    btn.disabled = false;
+    btn.textContent = '💾 Save & Download';
+  }
+}
+
+function toExifDate(v) {
+  if (!/[\dT-]/.test(v) || !/^\d{4}-\d{2}-\d{2}/.test(v)) return v;
+  const d = new Date(v);
+  if (isNaN(d.getTime())) return v;
+  const p = n => String(n).padStart(2, '0');
+  return d.getUTCFullYear() + ':' + p(d.getUTCMonth() + 1) + ':' + p(d.getUTCDate()) +
+    ' ' + p(d.getUTCHours()) + ':' + p(d.getUTCMinutes()) + ':' + p(d.getUTCSeconds());
+}
+
+function renderEdit(img) { editFields(); }
+viewEdit.addEventListener('click', e => {
+  if (e.target.closest('#saveEdit')) saveEdit();
+});
+
+/* ---------------- Clean ---------------- */
+
+function renderClean(img) {
+  const removed = img.meta.removed || [];
+  let html = '<div class="card"><h2>Strip all metadata</h2>';
+  html += '<div class="alert warn">Removes <b>all</b> metadata — EXIF, GPS, XMP, ICC, IPTC, text chunks — losslessly. The pixels are untouched, only the metadata segments are removed. Supported: JPEG &amp; PNG.</div>';
+  html += '<div class="toolbar"><button id="doStrip" class="danger">🧹 Remove all metadata in one click</button></div>';
+  html += '<div id="stripResult"></div></div>';
+  viewClean.innerHTML = html;
+}
+
+async function doStrip() {
+  const img = current();
+  if (!img) return;
+  const btn = el('doStrip');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>Stripping...';
+  try {
+    const result = await api('/api/strip', { image: img.source });
+    const ext = result.mime === 'image/png' ? 'png' : 'jpg';
+    const fname = img.name.replace(/\.[^.]+$/, '') + '-cleaned.' + ext;
+    let html = '<div class="alert ok">Metadata removed. Image size: ' + fmtSize(result.sizeBefore) + ' → ' + fmtSize(result.sizeAfter) + ' (' + Math.round(100 * result.sizeAfter / result.sizeBefore) + '%)</div>';
+    if (result.removed.length) {
+      html += '<div class="tag-list" style="margin:10px 0"><span style="font-size:12px;color:var(--muted)">Removed:</span>' + result.removed.map(r => '<span class="tag">' + r + '</span>').join('') + '</div>';
+    } else {
+      html += '<div class="alert info" style="margin-top:10px">No removable metadata segments were found — the image was already clean.</div>';
+    }
+    html += '<div class="card" style="margin-top:12px"><h2>Cleaned preview</h2><div class="preview"><img src="' + result.dataUrl + '">' +
+      '<div class="caption">' + fname + ' · ' + fmtSize(result.sizeAfter) + '</div></div>' +
+      '<div class="toolbar"><button id="dlStripped" class="danger">⬇ Download cleaned image</button></div></div>';
+    el('stripResult').innerHTML = html;
+    el('dlStripped').addEventListener('click', () => downloadDataUrl(result.dataUrl, fname));
+  } catch (e) {
+    showAlert('err', 'Strip failed: ' + e.message);
+    btn.disabled = false;
+    btn.textContent = '🧹 Remove all metadata in one click';
+  }
+}
+
+viewClean.addEventListener('click', e => {
+  if (e.target.closest('#doStrip')) doStrip();
+});
+
+/* ---------------- Utils ---------------- */
+
+function downloadDataUrl(dataUrl, name) {
+  const a = document.createElement('a');
+  a.href = dataUrl;
+  a.download = name;
+  a.click();
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+/* ---------------- Init ---------------- */
+
+fetch('/api/health').then(r => {
+  if (r.ok) { el('statusDot').classList.add('on'); el('statusText').textContent = 'Server connected'; }
+}).catch(() => {
+  el('statusDot').classList.remove('on');
+  el('statusText').textContent = 'Server offline';
+});
+renderCurrent();
+</script>
+</body>
+</html>
